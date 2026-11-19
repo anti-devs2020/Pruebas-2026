@@ -1,0 +1,1687 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>TechQuote Pro - Cotizador de Cómputo</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- React & ReactDOM & Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            brand: 'var(--brand-color, #2563eb)',
+            'brand-dark': 'var(--brand-dark-color, #1d4ed8)',
+            'brand-light': 'var(--brand-light-color, #eff6ff)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    :root {
+      --brand-color: #2563eb;
+      --brand-dark-color: #1d4ed8;
+      --brand-light-color: #eff6ff;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      background-color: #f8fafc;
+    }
+
+    /* Ocultar barra de desplazamiento manteniendo funcionalidad */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Animaciones táctiles estilo Android */
+    .active-scale {
+      transition: transform 0.1s ease;
+    }
+    .active-scale:active {
+      transform: scale(0.96);
+    }
+
+    /* Estilos exclusivos para impresión PDF / A4 */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #print-modal-container, #print-modal-container * {
+        visibility: visible;
+      }
+      #print-modal-container {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        background: white !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .print-shadow-none {
+        box-shadow: none !important;
+        border: none !important;
+      }
+      @page {
+        size: A4;
+        margin: 12mm;
+      }
+    }
+
+    /* Control de color de fondo dinamico */
+    .dynamic-bg-brand {
+      background-color: var(--brand-color);
+    }
+    .dynamic-text-brand {
+      color: var(--brand-color);
+    }
+    .dynamic-border-brand {
+      border-color: var(--brand-color);
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col justify-between selection:bg-blue-200">
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- DATOS POR DEFECTO ---
+    const DEFAULT_SETTINGS = {
+      companyName: '',
+      companyRuc: '',
+      companyAddress: '',
+      companyPhone: '',
+      companyEmail: '',
+      companyWeb: '',
+      companyLogo: '',
+      currency: 'S/',
+      taxName: 'IGV',
+      taxRate: 18,
+      taxIncluded: true,
+      paymentMethods: "• Banco BCP: 191-XXXXXXX-0-XX (CCI: 002-191-XXXXXXX)\n• Yape / Plin: 987-654-321\n• BBVA: 0011-XXXX-XXXXXXXX\n• Transferencia / Efectivo",
+      themeColor: '#2563eb',
+      defaultNotes: "• Garantía de hardware: 12 meses por defectos de fábrica.\n• Precios expresados en la moneda indicada e incluyen IGV.\n• Tiempo de entrega: Inmediato / 24 hrs previa recepción de pago.\n• Validez de la cotización: 7 días calendario."
+    };
+
+    const INITIAL_PRODUCTS = [
+      { id: 'p1', name: 'Procesador Intel Core i7-13700K 3.4GHz 16-Core', category: 'Procesadores', sku: 'PROC-INT-13700K', price: 1650.00, specs: '16 Núcleos, Socket LGA1700, 30MB Cache' },
+      { id: 'p2', name: 'Tarjeta de Video NVIDIA RTX 4070 Super 12GB GDDR6X', category: 'Tarjetas Gráficas', sku: 'GPU-NV-4070S', price: 2950.00, specs: '12GB GDDR6X, DLSS 3.5, Ray Tracing' },
+      { id: 'p3', name: 'Memoria RAM Corsair Vengeance DDR5 32GB (2x16GB) 6000MHz', category: 'RAM', sku: 'RAM-COR-32D5', price: 520.00, specs: 'DDR5 6000MHz CL36 Expo/XMP 3.0' },
+      { id: 'p4', name: 'SSD M.2 NVMe Kingston KC3000 1TB PCIe 4.0', category: 'Almacenamiento', sku: 'SSD-KNG-1TB', price: 380.00, specs: 'Lectura hasta 7000 MB/s, Escritura 6000 MB/s' },
+      { id: 'p5', name: 'Placa Madre ASUS TUF Gaming B760-Plus WiFi DDR5', category: 'Placas Madre', sku: 'MB-ASU-B760', price: 820.00, specs: 'LGA1700, PCIe 5.0, WiFi 6E, Bluetooth 5.3' }
+    ];
+
+    const INITIAL_CLIENTS = [
+      { id: 'c1', name: 'Innova Solutions S.A.C.', ruc: '20601234567', phone: '987654321', email: 'compras@innovasolutions.pe', address: 'Av. Javier Prado Este 1420, Of. 502, Lima' },
+      { id: 'c2', name: 'Carlos Mendoza Ríos', ruc: '10458912341', phone: '912345678', email: 'carlos.mendoza@gmail.com', address: 'Ca. Los Pinos 340, Miraflores' }
+    ];
+
+    const CATEGORIES = [
+      'Procesadores', 'Tarjetas Gráficas', 'RAM', 'Almacenamiento', 
+      'Placas Madre', 'Laptops', 'Periféricos', 'Fuentes y Cases', 'Otros'
+    ];
+
+    const PALETTE_COLORS = [
+      '#2563eb', // Azul
+      '#059669', // Verde Esmeralda
+      '#7c3aed', // Púrpura
+      '#d97706', // Ámbar / Naranja
+      '#e11d48', // Rojo Rosa
+      '#0f172a'  // Oscuro Grafito
+    ];
+
+    function App() {
+      // --- ESTADOS PRINCIPALES ---
+      const [activeTab, setActiveTab] = useState('cotizar'); // 'cotizar', 'productos', 'clientes', 'ajustes'
+      const [settings, setSettings] = useState(() => {
+        const saved = localStorage.getItem('techquote_settings');
+        return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+      });
+      const [products, setProducts] = useState(() => {
+        const saved = localStorage.getItem('techquote_products');
+        return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+      });
+      const [clients, setClients] = useState(() => {
+        const saved = localStorage.getItem('techquote_clients');
+        return saved ? JSON.parse(saved) : INITIAL_CLIENTS;
+      });
+      const [quoteHistory, setQuoteHistory] = useState(() => {
+        const saved = localStorage.getItem('techquote_history');
+        return saved ? JSON.parse(saved) : [];
+      });
+
+      // --- ESTADO DE COTIZACIÓN ACTUAL ---
+      const [currentQuote, setCurrentQuote] = useState({
+        number: `COT-${String(Math.floor(Math.random() * 900) + 100).padStart(4, '0')}`,
+        date: new Date().toISOString().split('T')[0],
+        validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        clientId: '',
+        customClient: { name: '', ruc: '', phone: '', email: '', address: '' },
+        items: [],
+        notes: settings.defaultNotes || ''
+      });
+
+      // --- ESTADOS DE MÓDALES Y NOTIFICACIONES ---
+      const [toast, setToast] = useState(null);
+      const [productModal, setProductModal] = useState({ open: false, item: null });
+      const [clientModal, setClientModal] = useState({ open: false, item: null });
+      const [addProductModal, setAddProductModal] = useState(false);
+      const [customItemModal, setCustomItemModal] = useState(false);
+      const [previewModal, setPreviewModal] = useState(false);
+      const [historyModal, setHistoryModal] = useState(false);
+
+      // Persistencia en LocalStorage
+      useEffect(() => {
+        localStorage.setItem('techquote_settings', JSON.stringify(settings));
+        // Actualizar variables de CSS para el tema
+        document.documentElement.style.setProperty('--brand-color', settings.themeColor || '#2563eb');
+        document.documentElement.style.setProperty('--brand-dark-color', adjustColor(settings.themeColor || '#2563eb', -20));
+      }, [settings]);
+
+      useEffect(() => {
+        localStorage.setItem('techquote_products', JSON.stringify(products));
+      }, [products]);
+
+      useEffect(() => {
+        localStorage.setItem('techquote_clients', JSON.stringify(clients));
+      }, [clients]);
+
+      useEffect(() => {
+        localStorage.setItem('techquote_history', JSON.stringify(quoteHistory));
+      }, [quoteHistory]);
+
+      // Función auxiliar para oscurecer el color hex del tema
+      function adjustColor(color, amount) {
+        return '#' + color.replace(/^#/, '').match(/.{2}/g).map(x => 
+          Math.min(255, Math.max(0, parseInt(x, 16) + amount)).toString(16).padStart(2, '0')
+        ).join('');
+      }
+
+      const showToast = (message, type = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3000);
+      };
+
+      // --- MANEJO DE IMÁGENES / LOGO ---
+      const handleLogoUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          if (file.size > 2 * 1024 * 1024) {
+            showToast('El logo debe pesar menos de 2MB', 'error');
+            return;
+          }
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setSettings(prev => ({ ...prev, companyLogo: reader.result }));
+            showToast('Logo actualizado correctamente');
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+
+      // --- CÁLCULOS MATEMÁTICOS DE COTIZACIÓN ---
+      const calculateTotals = () => {
+        const itemsTotal = currentQuote.items.reduce((acc, item) => {
+          const sub = item.price * item.qty;
+          const disc = sub * ((item.discount || 0) / 100);
+          return acc + (sub - disc);
+        }, 0);
+
+        const rate = parseFloat(settings.taxRate) || 0;
+        let subtotal = 0;
+        let taxAmount = 0;
+        let grandTotal = 0;
+
+        if (settings.taxIncluded) {
+          grandTotal = itemsTotal;
+          subtotal = grandTotal / (1 + rate / 100);
+          taxAmount = grandTotal - subtotal;
+        } else {
+          subtotal = itemsTotal;
+          taxAmount = subtotal * (rate / 100);
+          grandTotal = subtotal + taxAmount;
+        }
+
+        return {
+          subtotal: subtotal.toFixed(2),
+          taxAmount: taxAmount.toFixed(2),
+          grandTotal: grandTotal.toFixed(2),
+          itemsTotal: itemsTotal.toFixed(2)
+        };
+      };
+
+      const totals = calculateTotals();
+
+      // --- MANEJO DE ITEMS DE COTIZACIÓN ---
+      const addItemToQuote = (prod) => {
+        const existingIndex = currentQuote.items.findIndex(i => i.prodId === prod.id);
+        if (existingIndex >= 0) {
+          const updated = [...currentQuote.items];
+          updated[existingIndex].qty += 1;
+          setCurrentQuote({ ...currentQuote, items: updated });
+        } else {
+          setCurrentQuote({
+            ...currentQuote,
+            items: [
+              ...currentQuote.items,
+              {
+                id: Date.now().toString(),
+                prodId: prod.id,
+                name: prod.name,
+                sku: prod.sku,
+                price: prod.price,
+                qty: 1,
+                discount: 0,
+                specs: prod.specs || ''
+              }
+            ]
+          });
+        }
+        showToast(`Agregado: ${prod.name}`);
+        setAddProductModal(false);
+      };
+
+      const addCustomItemToQuote = (customItem) => {
+        setCurrentQuote({
+          ...currentQuote,
+          items: [
+            ...currentQuote.items,
+            {
+              id: Date.now().toString(),
+              name: customItem.name,
+              sku: customItem.sku || 'SERV-LIBRE',
+              price: parseFloat(customItem.price) || 0,
+              qty: parseInt(customItem.qty) || 1,
+              discount: parseFloat(customItem.discount) || 0,
+              specs: customItem.specs || ''
+            }
+          ]
+        });
+        showToast('Ítem personalizado agregado');
+        setCustomItemModal(false);
+      };
+
+      const updateQuoteItem = (id, field, value) => {
+        const updated = currentQuote.items.map(item => {
+          if (item.id === id) {
+            return { ...item, [field]: value };
+          }
+          return item;
+        });
+        setCurrentQuote({ ...currentQuote, items: updated });
+      };
+
+      const removeQuoteItem = (id) => {
+        setCurrentQuote({
+          ...currentQuote,
+          items: currentQuote.items.filter(i => i.id !== id)
+        });
+        showToast('Producto eliminado de la cotización');
+      };
+
+      // --- GUARDAR EN HISTORIAL ---
+      const saveQuoteToHistory = () => {
+        if (currentQuote.items.length === 0) {
+          showToast('Agrega al menos un producto a la cotización', 'error');
+          return;
+        }
+
+        const selectedClientObj = clients.find(c => c.id === currentQuote.clientId) || currentQuote.customClient;
+        const newEntry = {
+          ...currentQuote,
+          id: Date.now().toString(),
+          savedAt: new Date().toLocaleString(),
+          clientData: selectedClientObj,
+          totals: totals,
+          currency: settings.currency
+        };
+
+        setQuoteHistory([newEntry, ...quoteHistory]);
+        showToast('Cotización guardada en el historial');
+      };
+
+      // --- COPIAR A WHATSAPP ---
+      const copyWhatsAppSummary = () => {
+        const clientObj = clients.find(c => c.id === currentQuote.clientId) || currentQuote.customClient;
+        const clientName = clientObj.name || 'Cliente';
+        
+        let text = `*COTIZACIÓN ${currentQuote.number}*\n`;
+        text += `🏢 *${settings.companyName || 'TechQuote Pro'}*\n`;
+        text += `👤 *Cliente:* ${clientName}\n`;
+        text += `📅 *Fecha:* ${currentQuote.date}\n`;
+        text += `------------------------------------\n`;
+        
+        currentQuote.items.forEach((item, idx) => {
+          const itemTotal = (item.price * item.qty * (1 - (item.discount || 0)/100)).toFixed(2);
+          text += `${idx + 1}. *${item.name}*\n`;
+          text += `   Cant: ${item.qty} x ${settings.currency} ${item.price.toFixed(2)} = *${settings.currency} ${itemTotal}*\n`;
+        });
+
+        text += `------------------------------------\n`;
+        text += `*TOTAL A PAGAR: ${settings.currency} ${totals.grandTotal}*\n`;
+        if (settings.taxIncluded) text += `_(Incluye ${settings.taxName} ${settings.taxRate}%)_\n`;
+        text += `\n💳 *Métodos de Pago:*\n${settings.paymentMethods.split('\n')[0]}\n`;
+        text += `\n💬 *Notas:* ${currentQuote.notes.substring(0, 100)}...`;
+
+        // Copiar usando textarea temporal para compatibilidad iframe
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          document.execCommand('copy');
+          showToast('¡Resumen de Cotización copiado! Listo para pegar en WhatsApp');
+        } catch (err) {
+          showToast('Error al copiar al portapapeles', 'error');
+        }
+        document.body.removeChild(textarea);
+      };
+
+      // Verificar si los datos de la empresa están completos
+      const isCompanyConfigured = Boolean(settings.companyName && settings.companyRuc && settings.companyPhone);
+
+      return (
+        <div className="flex flex-col min-h-screen bg-slate-100 max-w-md mx-auto relative shadow-2xl overflow-hidden border-x border-slate-200">
+
+          {/* ALERTA DE TOAST */}
+          {toast && (
+            <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-xl shadow-xl text-white font-medium text-sm flex items-center space-x-2 transition-all duration-300 max-w-xs w-full ${toast.type === 'error' ? 'bg-red-600' : 'bg-slate-800'}`}>
+              <i className={`fas ${toast.type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle'} text-lg`}></i>
+              <span className="flex-1">{toast.message}</span>
+            </div>
+          )}
+
+          {/* CABECERA APP MATERIAL 3 */}
+          <header className="bg-slate-900 text-white p-4 sticky top-0 z-30 shadow-md flex items-center justify-between" style={{ backgroundColor: 'var(--brand-color)' }}>
+            <div className="flex items-center space-x-3">
+              {settings.companyLogo ? (
+                <img src={settings.companyLogo} alt="Logo" className="w-9 h-9 object-contain rounded-lg bg-white p-0.5 shadow-sm" />
+              ) : (
+                <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center font-bold text-lg">
+                  <i className="fas fa-desktop"></i>
+                </div>
+              )}
+              <div>
+                <h1 className="font-bold text-lg leading-tight tracking-tight">
+                  {settings.companyName || 'TechQuote Pro'}
+                </h1>
+                <p className="text-xs text-white/80 font-medium">Cotizador de Cómputo</p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <button 
+                onClick={() => setHistoryModal(true)}
+                className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white active-scale transition-colors"
+                title="Historial de Cotizaciones">
+                <i className="fas fa-history text-sm"></i>
+              </button>
+            </div>
+          </header>
+
+          {/* BANNER REQUISITO DE CONFIGURACIÓN */}
+          {!isCompanyConfigured && activeTab !== 'ajustes' && (
+            <div className="bg-amber-50 border-b border-amber-200 p-3 px-4 flex items-center justify-between text-xs text-amber-900">
+              <div className="flex items-center space-x-2">
+                <i className="fas fa-exclamation-triangle text-amber-600 text-sm"></i>
+                <span>Ingresa los datos de tu empresa para tus documentos.</span>
+              </div>
+              <button 
+                onClick={() => setActiveTab('ajustes')}
+                className="bg-amber-600 text-white font-semibold px-2.5 py-1 rounded-lg text-[11px] shadow-sm hover:bg-amber-700 active-scale">
+                Configurar
+              </button>
+            </div>
+          )}
+
+          {/* CONTENIDO PRINCIPAL SEGÚN LA PESTAÑA */}
+          <main className="flex-1 overflow-y-auto p-4 pb-24 space-y-4">
+
+            {/* ===================== PESTAÑA 1: COTIZAR ===================== */}
+            {activeTab === 'cotizar' && (
+              <div className="space-y-4 animate-fade-in">
+                
+                {/* TARJETA DATOS CABECERA DE COTIZACIÓN */}
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Datos de la Cotización</span>
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                      N° {currentQuote.number}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">Fecha Emisión</label>
+                      <input 
+                        type="date" 
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                        value={currentQuote.date}
+                        onChange={(e) => setCurrentQuote({ ...currentQuote, date: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">Validez Hasta</label>
+                      <input 
+                        type="date" 
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                        value={currentQuote.validUntil}
+                        onChange={(e) => setCurrentQuote({ ...currentQuote, validUntil: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* SELECCIÓN DE CLIENTE */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-[11px] font-semibold text-slate-500">Cliente</label>
+                      <button 
+                        onClick={() => setClientModal({ open: true, item: null })}
+                        className="text-[11px] font-bold text-blue-600 hover:underline flex items-center space-x-1">
+                        <i className="fas fa-plus-circle"></i>
+                        <span>Nuevo Cliente</span>
+                      </button>
+                    </div>
+                    <select 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
+                      value={currentQuote.clientId}
+                      onChange={(e) => setCurrentQuote({ ...currentQuote, clientId: e.target.value })}
+                    >
+                      <option value="">-- Seleccionar de Clientes Registrados --</option>
+                      {clients.map(c => (
+                        <option key={c.id} value={c.id}>{c.name} ({c.ruc})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* SI NO TIENE CLIENTE REGISTRADO SELECCIONADO, INGRESO RÁPIDO */}
+                  {!currentQuote.clientId && (
+                    <div className="pt-2 border-t border-dashed border-slate-200 grid grid-cols-2 gap-2">
+                      <input 
+                        type="text" 
+                        placeholder="Nombre / Razón Social *"
+                        className="col-span-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:bg-white"
+                        value={currentQuote.customClient.name}
+                        onChange={(e) => setCurrentQuote({
+                          ...currentQuote,
+                          customClient: { ...currentQuote.customClient, name: e.target.value }
+                        })}
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="RUC / DNI"
+                        className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:bg-white"
+                        value={currentQuote.customClient.ruc}
+                        onChange={(e) => setCurrentQuote({
+                          ...currentQuote,
+                          customClient: { ...currentQuote.customClient, ruc: e.target.value }
+                        })}
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="Teléfono / WhatsApp"
+                        className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:bg-white"
+                        value={currentQuote.customClient.phone}
+                        onChange={(e) => setCurrentQuote({
+                          ...currentQuote,
+                          customClient: { ...currentQuote.customClient, phone: e.target.value }
+                        })}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* BOTONES AGREGAR PRODUCTOS */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button 
+                    onClick={() => setAddProductModal(true)}
+                    className="bg-slate-800 text-white font-semibold p-3 rounded-2xl shadow-sm text-xs flex items-center justify-center space-x-2 active-scale hover:bg-slate-900">
+                    <i className="fas fa-search text-blue-400"></i>
+                    <span>Buscar Catálogo</span>
+                  </button>
+                  <button 
+                    onClick={() => setCustomItemModal(true)}
+                    className="bg-white border border-slate-300 text-slate-700 font-semibold p-3 rounded-2xl shadow-sm text-xs flex items-center justify-center space-x-2 active-scale hover:bg-slate-50">
+                    <i className="fas fa-plus text-slate-500"></i>
+                    <span>Ítem / Servicio Libre</span>
+                  </button>
+                </div>
+
+                {/* LISTA DE ÍTEMS EN LA COTIZACIÓN */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Productos Seleccionados ({currentQuote.items.length})
+                    </h3>
+                    {currentQuote.items.length > 0 && (
+                      <button 
+                        onClick={() => setCurrentQuote({ ...currentQuote, items: [] })}
+                        className="text-[11px] font-semibold text-red-500 hover:underline">
+                        Vaciar lista
+                      </button>
+                    )}
+                  </div>
+
+                  {currentQuote.items.length === 0 ? (
+                    <div className="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300 space-y-2">
+                      <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-400">
+                        <i className="fas fa-shopping-cart text-xl"></i>
+                      </div>
+                      <p className="text-xs font-medium text-slate-500">Aún no has añadido productos a la cotización.</p>
+                      <button 
+                        onClick={() => setAddProductModal(true)}
+                        className="text-xs font-bold text-blue-600 hover:underline">
+                        + Seleccionar de Catálogo
+                      </button>
+                    </div>
+                  ) : (
+                    currentQuote.items.map((item, index) => {
+                      const itemSubtotal = item.price * item.qty;
+                      const itemDiscount = itemSubtotal * ((item.discount || 0) / 100);
+                      const itemTotal = itemSubtotal - itemDiscount;
+
+                      return (
+                        <div key={item.id} className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-sm space-y-2 relative">
+                          <div className="flex justify-between items-start pr-6">
+                            <div>
+                              <h4 className="font-semibold text-xs text-slate-800 leading-tight">{item.name}</h4>
+                              <p className="text-[10px] text-slate-400 font-mono mt-0.5">SKU: {item.sku || 'N/A'}</p>
+                            </div>
+                            <button 
+                              onClick={() => removeQuoteItem(item.id)}
+                              className="absolute top-3 right-3 text-slate-300 hover:text-red-500 p-1">
+                              <i className="fas fa-trash-alt text-sm"></i>
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded-xl">
+                            {/* CANTIDAD */}
+                            <div>
+                              <span className="text-[10px] text-slate-400 block font-medium">Cantidad</span>
+                              <div className="flex items-center space-x-1 mt-0.5">
+                                <button 
+                                  onClick={() => updateQuoteItem(item.id, 'qty', Math.max(1, item.qty - 1))}
+                                  className="w-6 h-6 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-xs font-bold active-scale">
+                                  -
+                                </button>
+                                <span className="text-xs font-bold w-6 text-center">{item.qty}</span>
+                                <button 
+                                  onClick={() => updateQuoteItem(item.id, 'qty', item.qty + 1)}
+                                  className="w-6 h-6 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-xs font-bold active-scale">
+                                  +
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* PRECIO UNITARIO */}
+                            <div>
+                              <span className="text-[10px] text-slate-400 block font-medium">P. Unit ({settings.currency})</span>
+                              <input 
+                                type="number" 
+                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-700 outline-none"
+                                value={item.price}
+                                onChange={(e) => updateQuoteItem(item.id, 'price', parseFloat(e.target.value) || 0)}
+                              />
+                            </div>
+
+                            {/* DESCUENTO % */}
+                            <div>
+                              <span className="text-[10px] text-slate-400 block font-medium">Desc. (%)</span>
+                              <input 
+                                type="number" 
+                                min="0" 
+                                max="100"
+                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-700 outline-none"
+                                value={item.discount || 0}
+                                onChange={(e) => updateQuoteItem(item.id, 'discount', parseFloat(e.target.value) || 0)}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex justify-between items-center text-xs pt-1 border-t border-slate-100">
+                            <span className="text-slate-400 text-[11px]">Total Ítem:</span>
+                            <span className="font-bold text-slate-900">
+                              {settings.currency} {itemTotal.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* CONDICIONES / NOTAS DE VENTA */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                    Notas y Detalles Comerciales de la Venta
+                  </label>
+                  <textarea 
+                    rows="3"
+                    placeholder="Escribe garantía, tiempo de entrega, validez de la oferta..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+                    value={currentQuote.notes}
+                    onChange={(e) => setCurrentQuote({ ...currentQuote, notes: e.target.value })}
+                  ></textarea>
+                </div>
+
+                {/* RESUMEN DE TOTALES */}
+                <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-lg space-y-2">
+                  <div className="flex justify-between text-xs text-slate-300">
+                    <span>Subtotal</span>
+                    <span>{settings.currency} {totals.subtotal}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-300">
+                    <span>{settings.taxName} ({settings.taxRate}%)</span>
+                    <span>{settings.currency} {totals.taxAmount}</span>
+                  </div>
+                  <div className="border-t border-slate-700 pt-2 flex justify-between items-center">
+                    <div>
+                      <span className="text-sm font-bold block">TOTAL FINAL</span>
+                      <span className="text-[10px] text-slate-400">
+                        {settings.taxIncluded ? 'Precios incluyen impuesto' : 'Impuesto sumado al subtotal'}
+                      </span>
+                    </div>
+                    <span className="text-2xl font-black text-emerald-400">
+                      {settings.currency} {totals.grandTotal}
+                    </span>
+                  </div>
+                </div>
+
+                {/* BOTONES DE ACCIÓN PRINCIPALES */}
+                <div className="space-y-2 pt-2">
+                  <button 
+                    onClick={() => setPreviewModal(true)}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl shadow-lg flex items-center justify-center space-x-2 text-sm active-scale transition-colors"
+                    style={{ backgroundColor: 'var(--brand-color)' }}>
+                    <i className="fas fa-eye text-base"></i>
+                    <span>Vista Previa & Exportar Cotización</span>
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button 
+                      onClick={copyWhatsAppSummary}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-2xl shadow-sm text-xs flex items-center justify-center space-x-2 active-scale">
+                      <i className="fab fa-whatsapp text-lg"></i>
+                      <span>Resumen WhatsApp</span>
+                    </button>
+                    <button 
+                      onClick={saveQuoteToHistory}
+                      className="bg-slate-700 hover:bg-slate-800 text-white font-semibold py-3 rounded-2xl shadow-sm text-xs flex items-center justify-center space-x-2 active-scale">
+                      <i className="fas fa-save text-sm"></i>
+                      <span>Guardar Cotización</span>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* ===================== PESTAÑA 2: PRODUCTOS ===================== */}
+            {activeTab === 'productos' && (
+              <div className="space-y-4 animate-fade-in">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="font-bold text-slate-800 text-base">Catálogo de Productos</h2>
+                    <p className="text-xs text-slate-500">Gestiona tus hardware de cómputo y precios</p>
+                  </div>
+                  <button 
+                    onClick={() => setProductModal({ open: true, item: null })}
+                    className="bg-blue-600 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-1 shadow-sm active-scale"
+                    style={{ backgroundColor: 'var(--brand-color)' }}>
+                    <i className="fas fa-plus"></i>
+                    <span>Nuevo Producto</span>
+                  </button>
+                </div>
+
+                {/* PRODUCTOS LISTA */}
+                <div className="space-y-3">
+                  {products.length === 0 ? (
+                    <div className="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300">
+                      <p className="text-xs text-slate-500 font-medium">No hay productos registrados en el catálogo.</p>
+                    </div>
+                  ) : (
+                    products.map(prod => (
+                      <div key={prod.id} className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm space-y-2">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                              {prod.category}
+                            </span>
+                            <h3 className="font-bold text-xs text-slate-800 mt-1">{prod.name}</h3>
+                            <p className="text-[11px] text-slate-400 font-mono mt-0.5">SKU: {prod.sku || 'N/A'}</p>
+                          </div>
+                          <span className="font-black text-sm text-blue-600" style={{ color: 'var(--brand-color)' }}>
+                            {settings.currency} {prod.price.toFixed(2)}
+                          </span>
+                        </div>
+
+                        {prod.specs && (
+                          <p className="text-[11px] text-slate-500 line-clamp-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                            {prod.specs}
+                          </p>
+                        )}
+
+                        <div className="flex justify-end space-x-2 pt-1 border-t border-slate-100">
+                          <button 
+                            onClick={() => addItemToQuote(prod)}
+                            className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1 rounded-lg text-xs font-semibold active-scale">
+                            + Cotizar
+                          </button>
+                          <button 
+                            onClick={() => setProductModal({ open: true, item: prod })}
+                            className="bg-slate-100 text-slate-600 hover:bg-slate-200 px-2.5 py-1 rounded-lg text-xs font-semibold">
+                            <i className="fas fa-pen"></i>
+                          </button>
+                          <button 
+                            onClick={() => {
+                              if(confirm('¿Eliminar producto?')) {
+                                setProducts(products.filter(p => p.id !== prod.id));
+                                showToast('Producto eliminado');
+                              }
+                            }}
+                            className="bg-red-50 text-red-500 hover:bg-red-100 px-2.5 py-1 rounded-lg text-xs font-semibold">
+                            <i className="fas fa-trash"></i>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ===================== PESTAÑA 3: CLIENTES ===================== */}
+            {activeTab === 'clientes' && (
+              <div className="space-y-4 animate-fade-in">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="font-bold text-slate-800 text-base">Directorio de Clientes</h2>
+                    <p className="text-xs text-slate-500">Registra empresas y clientes para cotizaciones rápidas</p>
+                  </div>
+                  <button 
+                    onClick={() => setClientModal({ open: true, item: null })}
+                    className="bg-blue-600 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-1 shadow-sm active-scale"
+                    style={{ backgroundColor: 'var(--brand-color)' }}>
+                    <i className="fas fa-user-plus"></i>
+                    <span>Nuevo Cliente</span>
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {clients.length === 0 ? (
+                    <div className="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300">
+                      <p className="text-xs text-slate-500 font-medium">No hay clientes registrados.</p>
+                    </div>
+                  ) : (
+                    clients.map(cli => (
+                      <div key={cli.id} className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm space-y-2">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-bold text-xs text-slate-800">{cli.name}</h3>
+                            <p className="text-[11px] text-slate-500">RUC / DNI: <span className="font-semibold text-slate-700">{cli.ruc || 'N/A'}</span></p>
+                          </div>
+                        </div>
+
+                        <div className="text-[11px] text-slate-500 space-y-0.5">
+                          {cli.phone && <p><i className="fas fa-phone text-slate-400 w-4"></i> {cli.phone}</p>}
+                          {cli.email && <p><i className="fas fa-envelope text-slate-400 w-4"></i> {cli.email}</p>}
+                          {cli.address && <p><i className="fas fa-map-marker-alt text-slate-400 w-4"></i> {cli.address}</p>}
+                        </div>
+
+                        <div className="flex justify-end space-x-2 pt-1 border-t border-slate-100">
+                          <button 
+                            onClick={() => {
+                              setCurrentQuote({ ...currentQuote, clientId: cli.id });
+                              setActiveTab('cotizar');
+                              showToast(`Cliente ${cli.name} asignado a la cotización`);
+                            }}
+                            className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1 rounded-lg text-xs font-semibold active-scale">
+                            Seleccionar
+                          </button>
+                          <button 
+                            onClick={() => setClientModal({ open: true, item: cli })}
+                            className="bg-slate-100 text-slate-600 hover:bg-slate-200 px-2.5 py-1 rounded-lg text-xs font-semibold">
+                            <i className="fas fa-pen"></i>
+                          </button>
+                          <button 
+                            onClick={() => {
+                              if(confirm('¿Eliminar cliente?')) {
+                                setClients(clients.filter(c => c.id !== cli.id));
+                                showToast('Cliente eliminado');
+                              }
+                            }}
+                            className="bg-red-50 text-red-500 hover:bg-red-100 px-2.5 py-1 rounded-lg text-xs font-semibold">
+                            <i className="fas fa-trash"></i>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ===================== PESTAÑA 4: AJUSTES DE EMPRESA ===================== */}
+            {activeTab === 'ajustes' && (
+              <div className="space-y-4 animate-fade-in">
+                <div>
+                  <h2 className="font-bold text-slate-800 text-base">Ajustes de la Empresa</h2>
+                  <p className="text-xs text-slate-500">Configura manualmente los datos fiscales, logo y estilo de tu empresa</p>
+                </div>
+
+                {/* LOGO DE LA EMPRESA */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm space-y-3">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Logo de la Empresa</label>
+                  <div className="flex items-center space-x-4">
+                    {settings.companyLogo ? (
+                      <div className="relative group">
+                        <img src={settings.companyLogo} alt="Logo Prev" className="w-16 h-16 object-contain rounded-xl border border-slate-200 p-1 bg-white" />
+                        <button 
+                          onClick={() => setSettings({ ...settings, companyLogo: '' })}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs shadow-md">
+                          ×
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-16 h-16 rounded-xl bg-slate-100 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400">
+                        <i className="fas fa-image text-lg"></i>
+                        <span className="text-[9px] mt-1">Sin Logo</span>
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        id="logo-file-input"
+                        className="hidden" 
+                        onChange={handleLogoUpload}
+                      />
+                      <label 
+                        htmlFor="logo-file-input"
+                        className="inline-block bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs px-3.5 py-2 rounded-xl shadow-sm cursor-pointer active-scale">
+                        <i className="fas fa-upload mr-1.5"></i> Subir Logo
+                      </label>
+                      <p className="text-[10px] text-slate-400 mt-1">Formatos PNG, JPG (Máx 2MB)</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* COLOR DE TEMA DE LA APP Y COTIZACIÓN */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm space-y-3">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Color de Tema & Cotización</label>
+                  <div className="flex items-center space-x-2">
+                    {PALETTE_COLORS.map(color => (
+                      <button 
+                        key={color}
+                        onClick={() => setSettings({ ...settings, themeColor: color })}
+                        className={`w-8 h-8 rounded-full transition-transform border-2 ${settings.themeColor === color ? 'scale-110 border-slate-800 shadow-md' : 'border-transparent'}`}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                    <div className="pl-2 border-l border-slate-200 flex items-center space-x-1">
+                      <input 
+                        type="color" 
+                        value={settings.themeColor}
+                        onChange={(e) => setSettings({ ...settings, themeColor: e.target.value })}
+                        className="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* FORMULARIO DE DATOS DE LA EMPRESA */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm space-y-3">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Información General</label>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Nombre / Razón Social *</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ej. Tech Hardware Perú S.A.C."
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500"
+                      value={settings.companyName}
+                      onChange={(e) => setSettings({ ...settings, companyName: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">RUC / ID Fiscal *</label>
+                      <input 
+                        type="text" 
+                        placeholder="20123456789"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500"
+                        value={settings.companyRuc}
+                        onChange={(e) => setSettings({ ...settings, companyRuc: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">Teléfono / WhatsApp *</label>
+                      <input 
+                        type="text" 
+                        placeholder="987654321"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500"
+                        value={settings.companyPhone}
+                        onChange={(e) => setSettings({ ...settings, companyPhone: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Dirección Física</label>
+                    <input 
+                      type="text" 
+                      placeholder="Av. Las Camelias 450, San Isidro"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500"
+                      value={settings.companyAddress}
+                      onChange={(e) => setSettings({ ...settings, companyAddress: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">Correo Electrónico</label>
+                      <input 
+                        type="email" 
+                        placeholder="ventas@tech.com"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500"
+                        value={settings.companyEmail}
+                        onChange={(e) => setSettings({ ...settings, companyEmail: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">Sitio Web</label>
+                      <input 
+                        type="text" 
+                        placeholder="www.tech.com"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500"
+                        value={settings.companyWeb}
+                        onChange={(e) => setSettings({ ...settings, companyWeb: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* IMPUESTOS Y MONEDA */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm space-y-3">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Moneda e Impuestos</label>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">Moneda</label>
+                      <input 
+                        type="text" 
+                        placeholder="S/ o $"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none text-center"
+                        value={settings.currency}
+                        onChange={(e) => setSettings({ ...settings, currency: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">Nombre Impuesto</label>
+                      <input 
+                        type="text" 
+                        placeholder="IGV / IVA"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none text-center"
+                        value={settings.taxName}
+                        onChange={(e) => setSettings({ ...settings, taxName: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">Tasa %</label>
+                      <input 
+                        type="number" 
+                        placeholder="18"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none text-center"
+                        value={settings.taxRate}
+                        onChange={(e) => setSettings({ ...settings, taxRate: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-xs font-medium text-slate-700">Precios ingresados ya incluyen Impuesto</span>
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                      checked={settings.taxIncluded}
+                      onChange={(e) => setSettings({ ...settings, taxIncluded: e.target.checked })}
+                    />
+                  </div>
+                </div>
+
+                {/* MÉTODOS DE PAGO */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Cuentas Bancarias / Métodos de Pago</label>
+                  <textarea 
+                    rows="3"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                    value={settings.paymentMethods}
+                    onChange={(e) => setSettings({ ...settings, paymentMethods: e.target.value })}
+                  ></textarea>
+                </div>
+
+                <button 
+                  onClick={() => showToast('¡Configuración guardada con éxito!')}
+                  className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-2xl shadow-md text-xs active-scale">
+                  Guardar Todos los Cambios
+                </button>
+
+              </div>
+            )}
+
+          </main>
+
+          {/* ===================== NAVEGACIÓN INFERIOR ESTILO ANDROID ===================== */}
+          <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-slate-200 py-2 px-3 z-40 flex justify-around items-center shadow-lg">
+            
+            <button 
+              onClick={() => setActiveTab('cotizar')}
+              className={`flex flex-col items-center space-y-1 px-3 py-1 rounded-xl transition-all ${activeTab === 'cotizar' ? 'text-blue-600 font-bold scale-105' : 'text-slate-400 font-medium'}`}
+              style={{ color: activeTab === 'cotizar' ? 'var(--brand-color)' : undefined }}>
+              <i className="fas fa-file-invoice-dollar text-lg"></i>
+              <span className="text-[10px]">Cotizar</span>
+            </button>
+
+            <button 
+              onClick={() => setActiveTab('productos')}
+              className={`flex flex-col items-center space-y-1 px-3 py-1 rounded-xl transition-all ${activeTab === 'productos' ? 'text-blue-600 font-bold scale-105' : 'text-slate-400 font-medium'}`}
+              style={{ color: activeTab === 'productos' ? 'var(--brand-color)' : undefined }}>
+              <i className="fas fa-boxes text-lg"></i>
+              <span className="text-[10px]">Productos</span>
+            </button>
+
+            <button 
+              onClick={() => setActiveTab('clientes')}
+              className={`flex flex-col items-center space-y-1 px-3 py-1 rounded-xl transition-all ${activeTab === 'clientes' ? 'text-blue-600 font-bold scale-105' : 'text-slate-400 font-medium'}`}
+              style={{ color: activeTab === 'clientes' ? 'var(--brand-color)' : undefined }}>
+              <i className="fas fa-users text-lg"></i>
+              <span className="text-[10px]">Clientes</span>
+            </button>
+
+            <button 
+              onClick={() => setActiveTab('ajustes')}
+              className={`flex flex-col items-center space-y-1 px-3 py-1 rounded-xl transition-all ${activeTab === 'ajustes' ? 'text-blue-600 font-bold scale-105' : 'text-slate-400 font-medium'}`}
+              style={{ color: activeTab === 'ajustes' ? 'var(--brand-color)' : undefined }}>
+              <i className="fas fa-cog text-lg"></i>
+              <span className="text-[10px]">Ajustes</span>
+            </button>
+
+          </nav>
+
+          {/* ===================== MODAL: AGREGAR PRODUCTO DESDE CATÁLOGO ===================== */}
+          {addProductModal && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+              <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                  <h3 className="font-bold text-sm text-slate-800">Seleccionar Producto del Catálogo</h3>
+                  <button onClick={() => setAddProductModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                    <i className="fas fa-times text-base"></i>
+                  </button>
+                </div>
+
+                <div className="p-4 overflow-y-auto space-y-2 flex-1">
+                  {products.length === 0 ? (
+                    <p className="text-xs text-slate-500 text-center py-6">No hay productos en el catálogo.</p>
+                  ) : (
+                    products.map(prod => (
+                      <div 
+                        key={prod.id} 
+                        onClick={() => addItemToQuote(prod)}
+                        className="p-3 border border-slate-200 rounded-2xl hover:border-blue-500 hover:bg-blue-50/50 cursor-pointer transition-all flex justify-between items-center group">
+                        <div className="pr-2">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">{prod.category}</span>
+                          <h4 className="font-semibold text-xs text-slate-800 group-hover:text-blue-600">{prod.name}</h4>
+                          <p className="text-[10px] text-slate-400 font-mono">SKU: {prod.sku}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <span className="font-bold text-xs text-slate-900 block">{settings.currency} {prod.price.toFixed(2)}</span>
+                          <span className="text-[10px] text-blue-600 font-semibold">+ Añadir</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ===================== MODAL: AGREGAR ÍTEM / SERVICIO LIBRE ===================== */}
+          {customItemModal && (
+            <CustomItemModal 
+              onClose={() => setCustomItemModal(false)}
+              onAdd={addCustomItemToQuote}
+              currency={settings.currency}
+            />
+          )}
+
+          {/* ===================== MODAL: CREAR / EDITAR PRODUCTO ===================== */}
+          {productModal.open && (
+            <ProductFormModal 
+              item={productModal.item}
+              onClose={() => setProductModal({ open: false, item: null })}
+              onSave={(savedProd) => {
+                if (productModal.item) {
+                  setProducts(products.map(p => p.id === savedProd.id ? savedProd : p));
+                  showToast('Producto actualizado');
+                } else {
+                  setProducts([...products, { ...savedProd, id: Date.now().toString() }]);
+                  showToast('Producto registrado');
+                }
+                setProductModal({ open: false, item: null });
+              }}
+            />
+          )}
+
+          {/* ===================== MODAL: CREAR / EDITAR CLIENTE ===================== */}
+          {clientModal.open && (
+            <ClientFormModal 
+              item={clientModal.item}
+              onClose={() => setClientModal({ open: false, item: null })}
+              onSave={(savedCli) => {
+                if (clientModal.item) {
+                  setClients(clients.map(c => c.id === savedCli.id ? savedCli : c));
+                  showToast('Cliente actualizado');
+                } else {
+                  setClients([...clients, { ...savedCli, id: Date.now().toString() }]);
+                  showToast('Cliente registrado');
+                }
+                setClientModal({ open: false, item: null });
+              }}
+            />
+          )}
+
+          {/* ===================== MODAL: HISTORIAL DE COTIZACIONES ===================== */}
+          {historyModal && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+              <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                  <h3 className="font-bold text-sm text-slate-800">Historial de Cotizaciones</h3>
+                  <button onClick={() => setHistoryModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                    <i className="fas fa-times text-base"></i>
+                  </button>
+                </div>
+
+                <div className="p-4 overflow-y-auto space-y-3 flex-1">
+                  {quoteHistory.length === 0 ? (
+                    <p className="text-xs text-slate-500 text-center py-8">No hay cotizaciones guardadas aún.</p>
+                  ) : (
+                    quoteHistory.map(q => (
+                      <div key={q.id} className="p-3 border border-slate-200 rounded-2xl bg-slate-50/50 space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-blue-600">{q.number}</span>
+                          <span className="text-[10px] text-slate-400">{q.savedAt}</span>
+                        </div>
+                        <p className="text-xs font-semibold text-slate-800">{q.clientData?.name || 'Cliente Ocasional'}</p>
+                        <div className="flex justify-between items-center text-xs pt-1 border-t border-slate-200/60">
+                          <span className="text-slate-500">{q.items?.length || 0} ítems</span>
+                          <span className="font-black text-slate-900">{q.currency} {q.totals?.grandTotal}</span>
+                        </div>
+                        <div className="flex justify-end space-x-2 pt-1">
+                          <button 
+                            onClick={() => {
+                              setCurrentQuote(q);
+                              setHistoryModal(false);
+                              setActiveTab('cotizar');
+                              showToast(`Cotización ${q.number} cargada`);
+                            }}
+                            className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">
+                            Cargar
+                          </button>
+                          <button 
+                            onClick={() => {
+                              if(confirm('¿Eliminar del historial?')) {
+                                setQuoteHistory(quoteHistory.filter(h => h.id !== q.id));
+                              }
+                            }}
+                            className="text-[11px] font-bold text-red-500 bg-red-50 px-2.5 py-1 rounded-lg">
+                            Eliminar
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ===================== MODAL: VISTA PREVIA Y EXPORTACIÓN / IMPRESIÓN A4 ===================== */}
+          {previewModal && (
+            <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+              <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
+                
+                {/* BARRA SUPERIOR DE ACCIONES */}
+                <div className="no-print p-3 bg-slate-900 text-white flex justify-between items-center">
+                  <span className="text-xs font-bold flex items-center space-x-2">
+                    <i className="fas fa-file-pdf text-red-400 text-sm"></i>
+                    <span>Vista Previa de Documento A4</span>
+                  </span>
+                  <div className="flex items-center space-x-2">
+                    <button 
+                      onClick={() => window.print()}
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg flex items-center space-x-1.5 shadow-sm active-scale">
+                      <i className="fas fa-print"></i>
+                      <span>Imprimir / PDF</span>
+                    </button>
+                    <button 
+                      onClick={() => setPreviewModal(false)}
+                      className="bg-slate-700 hover:bg-slate-600 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs">
+                      <i className="fas fa-times"></i>
+                    </button>
+                  </div>
+                </div>
+
+                {/* CONTENIDO IMPRESO / A4 */}
+                <div className="p-6 overflow-y-auto flex-1 bg-white" id="print-modal-container">
+                  
+                  {/* ENCABEZADO CON LOGO Y DATOS EMPRESA */}
+                  <div className="flex justify-between items-start border-b-2 pb-4 mb-4" style={{ borderColor: settings.themeColor || '#2563eb' }}>
+                    <div className="space-y-1 max-w-[60%]">
+                      {settings.companyLogo ? (
+                        <img src={settings.companyLogo} alt="Logo" className="max-h-16 object-contain mb-2" />
+                      ) : (
+                        <h2 className="text-xl font-black uppercase tracking-tight" style={{ color: settings.themeColor || '#2563eb' }}>
+                          {settings.companyName || 'TechQuote Pro'}
+                        </h2>
+                      )}
+                      <p className="text-xs font-bold text-slate-800">{settings.companyName}</p>
+                      <p className="text-[11px] text-slate-500">RUC: {settings.companyRuc || 'N/A'}</p>
+                      <p className="text-[11px] text-slate-500">{settings.companyAddress}</p>
+                      <p className="text-[11px] text-slate-500">Tel: {settings.companyPhone} {settings.companyEmail && `| ${settings.companyEmail}`}</p>
+                    </div>
+
+                    <div className="text-right space-y-1">
+                      <div className="inline-block px-3 py-1 rounded-lg text-white font-black text-sm uppercase tracking-wider mb-1" style={{ backgroundColor: settings.themeColor || '#2563eb' }}>
+                        COTIZACIÓN
+                      </div>
+                      <p className="text-sm font-bold text-slate-900">{currentQuote.number}</p>
+                      <p className="text-[11px] text-slate-500">Emisión: <span className="font-medium text-slate-800">{currentQuote.date}</span></p>
+                      <p className="text-[11px] text-slate-500">Válido hasta: <span className="font-medium text-slate-800">{currentQuote.validUntil}</span></p>
+                    </div>
+                  </div>
+
+                  {/* DATOS DEL CLIENTE */}
+                  {(() => {
+                    const clientObj = clients.find(c => c.id === currentQuote.clientId) || currentQuote.customClient;
+                    return (
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 mb-4 grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase block">Cliente / Razón Social</span>
+                          <span className="font-bold text-slate-800">{clientObj.name || 'Cliente Ocasional'}</span>
+                          {clientObj.address && <p className="text-[11px] text-slate-500 mt-0.5">{clientObj.address}</p>}
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase block">RUC / DNI</span>
+                          <span className="font-medium text-slate-700">{clientObj.ruc || 'N/A'}</span>
+                          {clientObj.phone && <p className="text-[11px] text-slate-500 mt-0.5">Tel: {clientObj.phone}</p>}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* TABLA DE PRODUCTOS DE CÓMPUTO */}
+                  <table className="w-full text-left text-xs mb-4 border-collapse">
+                    <thead>
+                      <tr className="text-white text-[11px] font-bold" style={{ backgroundColor: settings.themeColor || '#2563eb' }}>
+                        <th className="p-2 rounded-l-lg">Ítem / Descripción</th>
+                        <th className="p-2 text-center">Cant.</th>
+                        <th className="p-2 text-right">P.Unit</th>
+                        <th className="p-2 text-right">Desc. %</th>
+                        <th className="p-2 text-right rounded-r-lg">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-[11px]">
+                      {currentQuote.items.map((item, idx) => {
+                        const sub = item.price * item.qty;
+                        const disc = sub * ((item.discount || 0) / 100);
+                        const tot = sub - disc;
+
+                        return (
+                          <tr key={item.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                            <td className="p-2 py-2.5">
+                              <span className="font-bold text-slate-800 block">{item.name}</span>
+                              {item.specs && <p className="text-[10px] text-slate-500 font-normal">{item.specs}</p>}
+                              {item.sku && <span className="text-[9px] text-slate-400 font-mono">SKU: {item.sku}</span>}
+                            </td>
+                            <td className="p-2 text-center font-bold text-slate-700">{item.qty}</td>
+                            <td className="p-2 text-right text-slate-600">{settings.currency} {item.price.toFixed(2)}</td>
+                            <td className="p-2 text-right text-slate-500">{item.discount || 0}%</td>
+                            <td className="p-2 text-right font-bold text-slate-900">{settings.currency} {tot.toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  {/* TOTALES Y FORMAS DE PAGO */}
+                  <div className="grid grid-cols-2 gap-4 items-start pt-2 border-t border-slate-200">
+                    
+                    {/* METODOS DE PAGO Y CONDICIONES */}
+                    <div className="space-y-3">
+                      <div>
+                        <h4 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                          Métodos de Pago
+                        </h4>
+                        <p className="text-[10px] text-slate-600 whitespace-pre-line font-mono bg-slate-50 p-2.5 rounded-lg border border-slate-200/60">
+                          {settings.paymentMethods}
+                        </p>
+                      </div>
+
+                      {currentQuote.notes && (
+                        <div>
+                          <h4 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                            Términos & Garantía
+                          </h4>
+                          <p className="text-[10px] text-slate-600 whitespace-pre-line bg-slate-50 p-2.5 rounded-lg border border-slate-200/60">
+                            {currentQuote.notes}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* CAJA DE TOTALES */}
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1 text-xs">
+                      <div className="flex justify-between text-slate-600">
+                        <span>Subtotal:</span>
+                        <span>{settings.currency} {totals.subtotal}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>{settings.taxName} ({settings.taxRate}%):</span>
+                        <span>{settings.currency} {totals.taxAmount}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm font-black pt-2 border-t border-slate-300" style={{ color: settings.themeColor || '#2563eb' }}>
+                        <span>TOTAL FINAL:</span>
+                        <span className="text-base">{settings.currency} {totals.grandTotal}</span>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* PIE DE PÁGINA DOCUMENTO */}
+                  <div className="mt-8 text-center pt-4 border-t border-slate-100 text-[10px] text-slate-400">
+                    <p>Gracias por su preferencia - Cotización generada por {settings.companyName || 'TechQuote Pro'}</p>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    // --- COMPONENTE AUXILIAR: MODAL ÍTEM LIBRE ---
+    function CustomItemModal({ onClose, onAdd, currency }) {
+      const [form, setForm] = useState({ name: '', sku: 'SERV-LIBRE', price: '', qty: 1, discount: 0, specs: '' });
+
+      return (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-5 space-y-3 shadow-2xl">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-sm text-slate-800">Agregar Ítem / Servicio Libre</h3>
+              <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 block mb-1">Nombre / Descripción del Servicio *</label>
+              <input 
+                type="text" 
+                placeholder="Ej. Mantenimiento Preventivo / Configuración Server"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 block mb-1">Precio Unitario ({currency}) *</label>
+                <input 
+                  type="number" 
+                  placeholder="0.00"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                  value={form.price}
+                  onChange={(e) => setForm({ ...form, price: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 block mb-1">Cantidad</label>
+                <input 
+                  type="number" 
+                  min="1"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                  value={form.qty}
+                  onChange={(e) => setForm({ ...form, qty: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 block mb-1">Especificaciones Adicionales</label>
+              <input 
+                type="text" 
+                placeholder="Ej. Incluye limpieza interna y cambio de pasta térmica"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none"
+                value={form.specs}
+                onChange={(e) => setForm({ ...form, specs: e.target.value })}
+              />
+            </div>
+
+            <button 
+              onClick={() => {
+                if(!form.name || !form.price) return alert('Ingresa nombre y precio');
+                onAdd(form);
+              }}
+              className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl text-xs active-scale shadow-md">
+              Añadir a Cotización
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // --- COMPONENTE AUXILIAR: FORMULARIO PRODUCTO ---
+    function ProductFormModal({ item, onClose, onSave }) {
+      const [form, setForm] = useState(item || {
+        name: '', category: 'Procesadores', sku: '', price: '', specs: ''
+      });
+
+      return (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-5 space-y-3 shadow-2xl">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-sm text-slate-800">{item ? 'Editar Producto' : 'Nuevo Producto'}</h3>
+              <button onClick={onClose} className="text-slate-400"><i className="fas fa-times"></i></button>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 block mb-1">Categoría</label>
+              <select 
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none"
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 block mb-1">Nombre del Producto *</label>
+              <input 
+                type="text" 
+                placeholder="Ej. Laptop Gaming Asus ROG Strix i9"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 block mb-1">SKU / Código</label>
+                <input 
+                  type="text" 
+                  placeholder="LAP-ASU-01"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none"
+                  value={form.sku}
+                  onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 block mb-1">Precio Unitario *</label>
+                <input 
+                  type="number" 
+                  placeholder="0.00"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none font-bold"
+                  value={form.price}
+                  onChange={(e) => setForm({ ...form, price: parseFloat(e.target.value) || '' })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 block mb-1">Especificaciones Técnicas</label>
+              <textarea 
+                rows="2"
+                placeholder="Memoria, pantalla, detalles técnicos..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs outline-none"
+                value={form.specs}
+                onChange={(e) => setForm({ ...form, specs: e.target.value })}
+              ></textarea>
+            </div>
+
+            <button 
+              onClick={() => {
+                if(!form.name || !form.price) return alert('Ingresa nombre y precio');
+                onSave(form);
+              }}
+              className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl text-xs active-scale">
+              Guardar Producto
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // --- COMPONENTE AUXILIAR: FORMULARIO CLIENTE ---
+    function ClientFormModal({ item, onClose, onSave }) {
+      const [form, setForm] = useState(item || {
+        name: '', ruc: '', phone: '', email: '', address: ''
+      });
+
+      return (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-5 space-y-3 shadow-2xl">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-sm text-slate-800">{item ? 'Editar Cliente' : 'Nuevo Cliente'}</h3>
+              <button onClick={onClose} className="text-slate-400"><i className="fas fa-times"></i></button>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 block mb-1">Nombre / Razón Social *</label>
+              <input 
+                type="text" 
+                placeholder="Ej. Computadoras Lima S.A.C."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 block mb-1">RUC / DNI</label>
+                <input 
+                  type="text" 
+                  placeholder="20987654321"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none"
+                  value={form.ruc}
+                  onChange={(e) => setForm({ ...form, ruc: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 block mb-1">Teléfono</label>
+                <input 
+                  type="text" 
+                  placeholder="987654321"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 block mb-1">Correo Electrónico</label>
+              <input 
+                type="email" 
+                placeholder="contacto@cliente.com"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 block mb-1">Dirección Física</label>
+              <input 
+                type="text" 
+                placeholder="Av. Principal 123, Oficina 201"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none"
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+              />
+            </div>
+
+            <button 
+              onClick={() => {
+                if(!form.name) return alert('Ingresa el nombre del cliente');
+                onSave(form);
+              }}
+              className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl text-xs active-scale">
+              Guardar Cliente
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Renderizar App en el DOM
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
